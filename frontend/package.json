@@ -28,6 +28,7 @@
     "expo-build-properties": "~1.0.10",
     "expo-constants": "~18.0.13",
     "expo-device": "~8.0.10",
+    "@expo-google-fonts/rubik": "^0.4.2",
     "expo-font": "~14.0.11",
     "expo-haptics": "~15.0.8",
     "expo-iap": "^3.4.12",

@@ -3,12 +3,13 @@ import React from 'react';
 import { View, Image, StyleSheet, Text } from 'react-native';
 import { COLORS } from '../utils/constants';
 
-// Custom sport icon URLs
-export const SPORT_ICON_URLS: Record<string, string> = {
-  padel: 'https://customer-assets.emergentagent.com/job_padel-finder-app/artifacts/3cxy0zew_padel%20%281%29.png',
-  tennis: 'https://customer-assets.emergentagent.com/job_padel-finder-app/artifacts/z6g71agz_tennis%20%281%29.png',
-  calcetto: 'https://customer-assets.emergentagent.com/job_padel-finder-app/artifacts/vba4q5gu_calcetto.png',
-  calcio8: 'https://customer-assets.emergentagent.com/job_padel-finder-app/artifacts/s1kuk84k_calcio%20a%208.png',
+// Icone sport locali (require statico, richiesto da React Native) - non più dipendenti
+// da un URL remoto ospitato da Emergent.
+export const SPORT_ICON_ASSETS: Record<string, any> = {
+  padel: require('../../assets/images/sport-padel.png'),
+  tennis: require('../../assets/images/sport-tennis.png'),
+  calcetto: require('../../assets/images/sport-calcetto.png'),
+  calcio8: require('../../assets/images/sport-calcio8.png'),
 };
 
 // Sport names
@@ -35,13 +36,13 @@ interface SportImageProps {
 }
 
 export function SportImage({ sport, size = 32, showLabel = false, style }: SportImageProps) {
-  const iconUrl = SPORT_ICON_URLS[sport] || SPORT_ICON_URLS.padel;
+  const iconSource = SPORT_ICON_ASSETS[sport] || SPORT_ICON_ASSETS.padel;
   const sportName = SPORT_NAMES[sport] || sport;
   
   return (
     <View style={[styles.container, style]}>
       <Image
-        source={{ uri: iconUrl }}
+        source={iconSource}
         style={{ width: size, height: size }}
         resizeMode="contain"
       />
@@ -69,7 +70,7 @@ export function SportBadgeNew({ sport, size = 'medium', showLabel = true }: Spor
   const { icon, padding, fontSize } = sizes[size];
   const sportColor = SPORT_COLORS[sport] || COLORS.primary;
   const sportName = SPORT_NAMES[sport] || sport;
-  const iconUrl = SPORT_ICON_URLS[sport] || SPORT_ICON_URLS.padel;
+  const iconSource = SPORT_ICON_ASSETS[sport] || SPORT_ICON_ASSETS.padel;
   
   return (
     <View style={[
@@ -82,7 +83,7 @@ export function SportBadgeNew({ sport, size = 'medium', showLabel = true }: Spor
       }
     ]}>
       <Image
-        source={{ uri: iconUrl }}
+        source={iconSource}
         style={{ width: icon, height: icon }}
         resizeMode="contain"
       />
@@ -95,9 +96,9 @@ export function SportBadgeNew({ sport, size = 'medium', showLabel = true }: Spor
   );
 }
 
-// Get sport icon URL helper
-export function getSportIconUrl(sport: string): string {
-  return SPORT_ICON_URLS[sport] || SPORT_ICON_URLS.padel;
+// Get sport icon source helper (uso locale, non più un URL)
+export function getSportIconSource(sport: string): any {
+  return SPORT_ICON_ASSETS[sport] || SPORT_ICON_ASSETS.padel;
 }
 
 // Get sport name helper

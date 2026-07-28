@@ -9,6 +9,16 @@
 // usually plays. Deliberately NOT the dark-navy-plus-neon-green combo of the category leader
 // (Playtomic), and NOT the warm-cream/terracotta AI-default pairing - this is a distinct identity.
 
+// Tipografia - Rubik, caricato in app/_layout.tsx via useFonts.
+// Titoli: Bold / Sottotitoli: SemiBold / Pulsanti: SemiBold / Testi: Regular / Etichette: Medium
+export const FONTS = {
+  title: 'Rubik_700Bold',
+  subtitle: 'Rubik_600SemiBold',
+  button: 'Rubik_600SemiBold',
+  body: 'Rubik_400Regular',
+  label: 'Rubik_500Medium',
+};
+
 export const COLORS = {
   // Primary - Floodlight gold (CTAs, active states, brand identity)
   primary: '#FFB020',

@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS } from '../utils/constants';
+import { COLORS, FONTS } from '../utils/constants';
 import { mediumHaptic } from '../utils/haptics';
 
 interface ButtonProps {
@@ -191,6 +191,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   text: {
+    fontFamily: FONTS.button,
     fontWeight: '600',
   },
   iconLeft: {

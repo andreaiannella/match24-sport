@@ -4,7 +4,7 @@ export { Input } from './Input';
 export { Card } from './Card';
 export { SportBadge } from './SportBadge';
 export { SportIcon, getSportColor, getSportName } from './SportIcon';
-export { SportImage, SportBadgeNew, getSportIconUrl, SPORT_ICON_URLS, SPORT_NAMES, SPORT_COLORS } from './SportImage';
+export { SportImage, SportBadgeNew, getSportIconSource, SPORT_ICON_ASSETS, SPORT_NAMES, SPORT_COLORS } from './SportImage';
 export { MatchCard } from './MatchCard';
 export { LoadingSpinner } from './LoadingSpinner';
 export { EmptyState } from './EmptyState';

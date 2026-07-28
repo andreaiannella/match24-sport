@@ -182,3 +182,59 @@ export interface ReviewReport {
   reason: string;
   created_at: string;
 }
+
+// ======================= Gamification: tornei, classifica, streak =======================
+
+export type TournamentRegistrationMode = 'individual' | 'team';
+export type TournamentStatus = 'open' | 'full' | 'in_progress' | 'completed';
+
+export interface Tournament {
+  tournament_id: string;
+  club_id: string;
+  sport: string;
+  format: string;
+  date: string;
+  start_time: string;
+  max_players: number;
+  current_players: number;
+  registration_mode: TournamentRegistrationMode;
+  team_size: number;
+  court_ids: string[];
+  status: TournamentStatus;
+  created_at: string;
+  // Presenti solo su GET /tournaments/{id}
+  participants?: TournamentParticipant[];
+  teams?: TournamentTeam[];
+  matches?: Match[];
+}
+
+export interface TournamentParticipant {
+  tournament_id: string;
+  user_id: string;
+  joined_at: string;
+}
+
+export interface TournamentTeam {
+  team_id: string;
+  tournament_id: string;
+  team_name: string;
+  captain_user_id: string;
+  member_user_ids: string[];
+  created_at: string;
+}
+
+export interface ClubLeaderboardEntry {
+  club_id: string;
+  user_id: string;
+  name: string;
+  points: number;
+  wins: number;
+  losses: number;
+  current_streak: number;
+  updated_at: string;
+}
+
+export interface PlayerStreak {
+  current_streak: number;
+  best_streak: number;
+}

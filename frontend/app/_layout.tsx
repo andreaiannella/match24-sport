@@ -4,6 +4,13 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import {
+  useFonts,
+  Rubik_400Regular,
+  Rubik_500Medium,
+  Rubik_600SemiBold,
+  Rubik_700Bold,
+} from '@expo-google-fonts/rubik';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { LanguageProvider } from '../src/contexts/LanguageContext';
 import { SplashScreen, GradientBackground } from '../src/components';
@@ -11,12 +18,20 @@ import { COLORS } from '../src/utils/constants';
 
 export default function RootLayout() {
   const [showSplash, setShowSplash] = useState(true);
+  const [fontsLoaded] = useFonts({
+    Rubik_400Regular,
+    Rubik_500Medium,
+    Rubik_600SemiBold,
+    Rubik_700Bold,
+  });
 
   const handleSplashComplete = () => {
     setShowSplash(false);
   };
 
-  if (showSplash) {
+  // Lo splash resta visibile finché i font non sono pronti, anche se l'animazione
+  // dello splash stesso è già finita - evita un lampo di testo col font di sistema.
+  if (showSplash || !fontsLoaded) {
     return (
       <SafeAreaProvider>
         <View style={styles.container}>

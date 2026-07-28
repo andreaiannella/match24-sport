@@ -562,6 +562,56 @@ class APIClient {
     const response = await this.client.get('/sponsors', { params: { city, limit } });
     return response.data;
   }
+
+  // ======================= TOURNAMENTS (gamification) =======================
+
+  async listTournaments(params?: { club_id?: string; sport?: string; status?: string; limit?: number }) {
+    const response = await this.client.get('/tournaments', { params });
+    return response.data;
+  }
+
+  async getTournament(tournamentId: string) {
+    const response = await this.client.get(`/tournaments/${tournamentId}`);
+    return response.data;
+  }
+
+  async createTournament(data: {
+    sport: string; format?: string; date: string; start_time: string;
+    max_players: number; registration_mode: 'individual' | 'team'; team_size: number; court_ids?: string[];
+  }) {
+    const response = await this.client.post('/tournaments', data);
+    return response.data;
+  }
+
+  async joinTournament(tournamentId: string) {
+    const response = await this.client.post(`/tournaments/${tournamentId}/join`);
+    return response.data;
+  }
+
+  async createTournamentTeam(tournamentId: string, teamName: string) {
+    const response = await this.client.post(`/tournaments/${tournamentId}/teams`, { team_name: teamName });
+    return response.data;
+  }
+
+  async joinTournamentTeam(tournamentId: string, teamId: string) {
+    const response = await this.client.post(`/tournaments/${tournamentId}/teams/${teamId}/join`);
+    return response.data;
+  }
+
+  async generateBracket(tournamentId: string) {
+    const response = await this.client.post(`/tournaments/${tournamentId}/generate-bracket`);
+    return response.data;
+  }
+
+  async getClubLeaderboard(clubId: string, period: 'week' | 'month' | 'all_time' = 'all_time', limit: number = 20) {
+    const response = await this.client.get(`/clubs/${clubId}/leaderboard`, { params: { period, limit } });
+    return response.data;
+  }
+
+  async getMyStreak() {
+    const response = await this.client.get('/player/streak');
+    return response.data;
+  }
 }
 
 export const apiClient = new APIClient();
