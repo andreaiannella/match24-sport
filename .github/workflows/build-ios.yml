@@ -1,0 +1,143 @@
+name: Build iOS App
+
+# Si attiva a mano dalla scheda "Actions" di GitHub. Usa un runner macOS di
+# GitHub (con Xcode già installato) - sostituisce il bisogno di un Mac fisico.
+# Servono i Secret di firma caricati prima di lanciarlo (vedi commenti sotto).
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Installa dipendenze
+        run: npm install --legacy-peer-deps
+
+      # Rigeneriamo il progetto Xcode dal contenuto di app.json ad ogni build,
+      # così bundle identifier/versione/plugin restano sempre sincronizzati
+      # (il progetto ios/ committato nel repo potrebbe non riflettere le
+      # ultime modifiche ad app.json).
+      - name: Genera il progetto nativo iOS (expo prebuild)
+        env:
+          EXPO_PUBLIC_BACKEND_URL: ${{ vars.EXPO_PUBLIC_BACKEND_URL }}
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Installa CocoaPods
+        working-directory: frontend/ios
+        run: pod install
+
+      # Certificato di distribuzione + provisioning profile vanno caricati
+      # come Secret di repository. IMPORTANTE: dato che l'app è già
+      # pubblicata, devono essere lo STESSO certificato/profilo usati finora
+      # dalle build EAS - non nuovi - altrimenti Apple rifiuta l'update.
+      # Recuperali con: eas credentials  (poi iOS > il tuo profilo)
+      - name: Importa certificato di firma e provisioning profile
+        working-directory: frontend/ios
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/matchsport24-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 12)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$IOS_CERTIFICATE_BASE64" | base64 -d > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 -k "$KEYCHAIN_PATH" -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/matchsport24.mobileprovision
+
+          PROFILE_PATH=~/Library/MobileDevice/Provisioning\ Profiles/matchsport24.mobileprovision
+          security cms -D -i "$PROFILE_PATH" > $RUNNER_TEMP/profile.plist
+          if [ ! -s "$RUNNER_TEMP/profile.plist" ]; then
+            echo "::error::Impossibile decodificare il provisioning profile - il file potrebbe essere corrotto o vuoto."
+            exit 1
+          fi
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" $RUNNER_TEMP/profile.plist)
+          if [ -z "$PROFILE_UUID" ]; then
+            echo "::error::UUID del provisioning profile non trovato nel file decodificato."
+            exit 1
+          fi
+          echo "Profilo trovato: $PROFILE_UUID"
+          echo "PROVISIONING_PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
+
+      - name: Compila e archivia l'app
+        working-directory: frontend/ios
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcodebuild -workspace MatchSport24.xcworkspace -scheme MatchSport24 -configuration Release \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_UUID" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            -archivePath $RUNNER_TEMP/MatchSport24.xcarchive archive
+
+      - name: Genera ExportOptions.plist
+        working-directory: frontend/ios
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cat > ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>teamID</key>
+            <string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.matchsport24.app</key>
+              <string>${{ env.PROVISIONING_PROFILE_UUID }}</string>
+            </dict>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Esporta il file .ipa
+        working-directory: frontend/ios
+        run: |
+          xcodebuild -exportArchive -archivePath $RUNNER_TEMP/MatchSport24.xcarchive \
+            -exportOptionsPlist ExportOptions.plist -exportPath $RUNNER_TEMP/export
+
+      - name: Carica il file .ipa come risultato
+        uses: actions/upload-artifact@v4
+        with:
+          name: matchsport24-ios-release
+          path: ${{ runner.temp }}/export/*.ipa
+
+      # Caricamento automatico su App Store Connect. Richiede una API Key di
+      # tipo "team" creata su App Store Connect > Users and Access >
+      # Integrations > Keys.
+      - name: Carica su App Store Connect
+        working-directory: frontend/ios
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 -d > ~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8
+          IPA_PATH=$(find $RUNNER_TEMP/export -name "*.ipa" | head -n 1)
+          xcrun altool --upload-app -f "$IPA_PATH" -t ios \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
