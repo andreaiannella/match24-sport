@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.matchsport24.app",
+      "bundleIdentifier": "app.emergent.padelfinderappfd4b6598",
       "buildNumber": "26",
       "infoPlist": {
         "NSCameraUsageDescription": "Match Sport 24 utilizza la fotocamera per scattare foto del tuo profilo e dei campi sportivi del tuo circolo, permettendoti di personalizzare il tuo account e mostrare le strutture ai giocatori.",

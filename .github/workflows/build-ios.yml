@@ -107,7 +107,7 @@ jobs:
             <string>Apple Distribution</string>
             <key>provisioningProfiles</key>
             <dict>
-              <key>com.matchsport24.app</key>
+              <key>app.emergent.padelfinderappfd4b6598</key>
               <string>${{ env.PROVISIONING_PROFILE_UUID }}</string>
             </dict>
           </dict>
