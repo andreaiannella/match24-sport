@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   TouchableOpacity,
   KeyboardAvoidingView,
@@ -15,8 +16,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button, Input, GradientBackground } from '../../src/components';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useLanguage } from '../../src/contexts/LanguageContext';
-import { COLORS } from '../../src/utils/constants';
+import { COLORS, FONTS } from '../../src/utils/constants';
 import { apiClient } from '../../src/api/client';
+
+const appLogo = require('../../assets/images/gamification/app-logo.png');
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -61,15 +64,11 @@ export default function RegisterScreen() {
 
     try {
       setError('');
-      console.log('[Register] Starting registration for:', email);
       await register(email, password, name, 'player', referralCode || undefined);
-      console.log('[Register] Registration successful, redirecting to onboarding');
       router.replace('/player/onboarding');
     } catch (err: any) {
-      console.error('[Register] Registration failed:', err?.message || err);
-      console.error('[Register] Error response:', JSON.stringify(err?.response?.data));
-      const errorMessage = err.response?.data?.detail || 
-                          err.message || 
+      const errorMessage = err.response?.data?.detail ||
+                          err.message ||
                           'Errore durante la registrazione. Verifica la connessione.';
       setError(errorMessage);
     }
@@ -95,11 +94,9 @@ export default function RegisterScreen() {
             </TouchableOpacity>
 
             <View style={styles.header}>
-              <View style={styles.logoIcon}>
-                <Ionicons name="person-add" size={32} color={COLORS.primary} />
-              </View>
-              <Text style={styles.title}>{t('register_as_player')}</Text>
-              <Text style={styles.subtitle}>Crea il tuo account e trova partite</Text>
+              <Image source={appLogo} style={styles.logo} resizeMode="contain" />
+              <Text style={styles.title}>Crea il tuo account</Text>
+              <Text style={styles.subtitle}>Il tuo prossimo match parte da qui.</Text>
             </View>
 
             {error ? (
@@ -113,7 +110,7 @@ export default function RegisterScreen() {
               <View style={styles.inviteBanner}>
                 <Ionicons name="gift-outline" size={20} color={COLORS.primary} />
                 <Text style={styles.inviteBannerText}>
-                  Sei stato invitato da <Text style={{ fontWeight: '800' }}>{invitingClubName}</Text>
+                  Sei stato invitato da <Text style={styles.inviteBannerBold}>{invitingClubName}</Text>
                 </Text>
               </View>
             ) : null}
@@ -122,68 +119,69 @@ export default function RegisterScreen() {
               <Input
                 label={t('name')}
                 placeholder="Mario Rossi"
-              value={name}
-              onChangeText={setName}
-              autoCapitalize="words"
-              leftIcon="person-outline"
-            />
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
+                leftIcon="person-outline"
+              />
 
-            <Input
-              label={t('email')}
-              placeholder="nome@email.com"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              leftIcon="mail-outline"
-            />
+              <Input
+                label={t('email')}
+                placeholder="nome@email.com"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                leftIcon="mail-outline"
+              />
 
-            <Input
-              label={t('password')}
-              placeholder="Minimo 6 caratteri"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              leftIcon="lock-closed-outline"
-            />
+              <Input
+                label={t('password')}
+                placeholder="Minimo 6 caratteri"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                leftIcon="lock-closed-outline"
+              />
 
-            <Input
-              label="Conferma Password"
-              placeholder="Ripeti la password"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              leftIcon="lock-closed-outline"
-            />
+              <Input
+                label="Conferma Password"
+                placeholder="Ripeti la password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                leftIcon="lock-closed-outline"
+              />
 
-            <Input
-              label="Codice invito circolo (facoltativo)"
-              placeholder="Es. MSP-A7K2"
-              value={referralCode}
-              onChangeText={(v) => setReferralCode(v.toUpperCase())}
-              autoCapitalize="characters"
-              leftIcon="pricetag-outline"
-              editable={!invitingClubName}
-            />
+              <Input
+                label="Codice invito circolo (facoltativo)"
+                placeholder="Es. MSP-A7K2"
+                value={referralCode}
+                onChangeText={(v) => setReferralCode(v.toUpperCase())}
+                autoCapitalize="characters"
+                leftIcon="pricetag-outline"
+                editable={!invitingClubName}
+              />
 
-            <Button
-              title={t('register')}
-              onPress={handleRegister}
-              loading={isLoading}
-              fullWidth
-              size="large"
-            />
-          </View>
+              <Button
+                title="Crea account"
+                onPress={handleRegister}
+                loading={isLoading}
+                fullWidth
+                size="large"
+                style={styles.submitButton}
+              />
+            </View>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>{t('have_account')}</Text>
-            <TouchableOpacity onPress={() => router.push('/auth/login')}>
-              <Text style={styles.footerLink}> {t('login')}</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>{t('have_account')}</Text>
+              <TouchableOpacity onPress={() => router.push('/auth/login')}>
+                <Text style={styles.footerLink}> {t('login')}</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </GradientBackground>
   );
 }
@@ -212,26 +210,23 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: 20,
   },
-  logoIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    backgroundColor: COLORS.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
+  logo: {
+    width: 76,
+    height: 76,
+    marginBottom: 12,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '800',
+    fontSize: 22,
+    fontFamily: FONTS.title,
     color: COLORS.text,
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14.5,
+    fontFamily: FONTS.body,
     color: COLORS.textSecondary,
     textAlign: 'center',
   },
@@ -245,6 +240,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: COLORS.error,
+    fontFamily: FONTS.body,
     marginLeft: 8,
     flex: 1,
   },
@@ -261,26 +257,18 @@ const styles = StyleSheet.create({
   },
   inviteBannerText: {
     color: COLORS.text,
+    fontFamily: FONTS.body,
     fontSize: 14,
     flex: 1,
+  },
+  inviteBannerBold: {
+    fontFamily: FONTS.title,
   },
   form: {
     flex: 1,
   },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 24,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: COLORS.border,
-  },
-  dividerText: {
-    color: COLORS.textMuted,
-    marginHorizontal: 16,
-    fontSize: 14,
+  submitButton: {
+    marginTop: 8,
   },
   footer: {
     flexDirection: 'row',
@@ -289,11 +277,12 @@ const styles = StyleSheet.create({
   },
   footerText: {
     color: COLORS.textSecondary,
-    fontSize: 16,
+    fontFamily: FONTS.body,
+    fontSize: 15,
   },
   footerLink: {
     color: COLORS.primary,
-    fontSize: 16,
-    fontWeight: '600',
+    fontFamily: FONTS.button,
+    fontSize: 15,
   },
 });
