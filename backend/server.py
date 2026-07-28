@@ -553,6 +553,20 @@ async def generate_club_referral_code() -> str:
     # Extremely unlikely fallback: widen the code
     return "MSP-" + uuid.uuid4().hex[:6].upper()
 
+def get_current_period_keys() -> dict:
+    """Chiavi dei periodi correnti per la classifica di circolo.
+    Ogni periodo e' un bucket indipendente (es. mese = "2026-07") - al cambio di
+    settimana/mese si parte da un bucket nuovo e vuoto automaticamente, senza
+    bisogno di nessun job di reset schedulato. I dati dei periodi passati restano
+    comunque nel database, solo non vengono piu' interrogati come "correnti"."""
+    now = datetime.now(timezone.utc)
+    iso_year, iso_week, _ = now.isocalendar()
+    return {
+        "week": f"{iso_year}-W{iso_week:02d}",
+        "month": now.strftime("%Y-%m"),
+        "all_time": "all_time",
+    }
+
 def calculate_elo_change(player_rating: int, opponent_rating: int, result: float, k: int = 32) -> int:
     """Calculate Elo rating change. result: 1 for win, 0.5 for draw, 0 for loss"""
     expected = 1 / (1 + 10 ** ((opponent_rating - player_rating) / 400))
@@ -713,15 +727,20 @@ async def update_player_ratings_after_match(match_id: str):
                 {"$set": {"best_streak": streak_doc["current_streak"]}}
             )
         if match.get("club_id"):
-            await db.club_leaderboard.update_one(
-                {"club_id": match["club_id"], "user_id": player_id},
-                {
-                    "$inc": {"points": points_per_win, "wins": 1},
-                    "$set": {"updated_at": datetime.now(timezone.utc)},
-                    "$setOnInsert": {"club_id": match["club_id"], "user_id": player_id}
-                },
-                upsert=True
-            )
+            # Aggiorna la classifica su tutti e tre i periodi in parallelo: settimana,
+            # mese e sempre. Ogni periodo e' un "secchio" a se' (chiave tipo "2026-07"
+            # per il mese) - al cambio di mese si parte semplicemente da un secchio
+            # nuovo e vuoto, senza bisogno di nessun job di reset schedulato.
+            for period_name, period_key in get_current_period_keys().items():
+                await db.club_leaderboard.update_one(
+                    {"club_id": match["club_id"], "user_id": player_id, "period": period_key},
+                    {
+                        "$inc": {"points": points_per_win, "wins": 1},
+                        "$set": {"updated_at": datetime.now(timezone.utc), "period_type": period_name},
+                        "$setOnInsert": {"club_id": match["club_id"], "user_id": player_id, "period": period_key}
+                    },
+                    upsert=True
+                )
 
     for player_id in losers:
         await db.player_streaks.update_one(
@@ -730,12 +749,13 @@ async def update_player_ratings_after_match(match_id: str):
             upsert=True
         )
         if match.get("club_id"):
-            await db.club_leaderboard.update_one(
-                {"club_id": match["club_id"], "user_id": player_id},
-                {"$inc": {"losses": 1}, "$set": {"updated_at": datetime.now(timezone.utc)},
-                 "$setOnInsert": {"club_id": match["club_id"], "user_id": player_id, "points": 0}},
-                upsert=True
-            )
+            for period_name, period_key in get_current_period_keys().items():
+                await db.club_leaderboard.update_one(
+                    {"club_id": match["club_id"], "user_id": player_id, "period": period_key},
+                    {"$inc": {"losses": 1}, "$set": {"updated_at": datetime.now(timezone.utc), "period_type": period_name},
+                     "$setOnInsert": {"club_id": match["club_id"], "user_id": player_id, "period": period_key, "points": 0}},
+                    upsert=True
+                )
 
     if is_tournament_match:
         await advance_tournament_bracket(match["tournament_id"], match_id)
@@ -2882,11 +2902,14 @@ async def advance_tournament_bracket(tournament_id: str, completed_match_id: str
         # Era la finale: torneo completato, bonus al team vincitore
         champions = winners[0]
         for uid in champions:
-            await db.club_leaderboard.update_one(
-                {"club_id": tournament["club_id"], "user_id": uid},
-                {"$inc": {"points": 100}, "$set": {"updated_at": datetime.now(timezone.utc)}},
-                upsert=True
-            )
+            for period_name, period_key in get_current_period_keys().items():
+                await db.club_leaderboard.update_one(
+                    {"club_id": tournament["club_id"], "user_id": uid, "period": period_key},
+                    {"$inc": {"points": 100},
+                     "$set": {"updated_at": datetime.now(timezone.utc), "period_type": period_name},
+                     "$setOnInsert": {"club_id": tournament["club_id"], "user_id": uid, "period": period_key}},
+                    upsert=True
+                )
             await db.player_badges.insert_one({
                 "badge_id": f"badge_{uuid.uuid4().hex[:10]}",
                 "user_id": uid, "club_id": tournament["club_id"],
@@ -2934,9 +2957,12 @@ async def advance_tournament_bracket(tournament_id: str, completed_match_id: str
 
 @api_router.get("/clubs/{club_id}/leaderboard")
 async def get_club_leaderboard(club_id: str, period: str = Query("all_time", regex="^(week|month|all_time)$"), limit: int = Query(20, ge=1, le=100)):
-    """Classifica del circolo. Nota v1: 'week'/'month' filtrano sui punti totali correnti
-    (non c'e' ancora uno storico segmentato per periodo - prossimo passo se serve davvero)."""
-    entries = await db.club_leaderboard.find({"club_id": club_id}, {"_id": 0}).sort("points", -1).to_list(limit)
+    """Classifica del circolo, per il periodo richiesto. 'week'/'month' mostrano solo i
+    punti del periodo corrente in corso - al cambio di settimana/mese si riparte da zero."""
+    period_key = get_current_period_keys()[period]
+    entries = await db.club_leaderboard.find(
+        {"club_id": club_id, "period": period_key}, {"_id": 0}
+    ).sort("points", -1).to_list(limit)
     for e in entries:
         user = await db.users.find_one({"user_id": e["user_id"]}, {"_id": 0, "name": 1})
         e["name"] = user["name"] if user else "Giocatore"
@@ -4053,8 +4079,8 @@ async def create_database_indexes():
         await db.tournament_teams.create_index("team_id", unique=True)
         await db.tournament_teams.create_index("tournament_id")
         await db.matches.create_index([("tournament_id", 1), ("tournament_round_order", 1)])
-        await db.club_leaderboard.create_index([("club_id", 1), ("user_id", 1)], unique=True)
-        await db.club_leaderboard.create_index([("club_id", 1), ("points", -1)])
+        await db.club_leaderboard.create_index([("club_id", 1), ("user_id", 1), ("period", 1)], unique=True)
+        await db.club_leaderboard.create_index([("club_id", 1), ("period", 1), ("points", -1)])
         await db.player_streaks.create_index("user_id", unique=True)
         await db.player_badges.create_index("user_id")
         
