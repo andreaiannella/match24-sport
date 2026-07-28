@@ -688,6 +688,58 @@ async def update_player_ratings_after_match(match_id: str):
         await db.player_rating_history.insert_one(history)
         logger.info(f"Updated rating for player {player_id}: {current_rating['rating']} -> {new_rating} ({rating_change:+d})")
     
+    # --- Gamification: streak, classifica di circolo, avanzamento tabellone torneo ---
+    # Nello stesso punto in cui si aggiorna l'ELO, cosi' ogni partita (normale o di torneo)
+    # alimenta automaticamente streak e classifica senza duplicare la logica altrove.
+    is_tournament_match = bool(match.get("tournament_id"))
+    points_per_win = 30 if is_tournament_match else 10
+    winners = team_a_players if winner_team == "A" else (team_b_players if winner_team == "B" else [])
+    losers = team_b_players if winner_team == "A" else (team_a_players if winner_team == "B" else [])
+
+    for player_id in winners:
+        await db.player_streaks.update_one(
+            {"user_id": player_id},
+            {
+                "$inc": {"current_streak": 1},
+                "$set": {"updated_at": datetime.now(timezone.utc)},
+                "$setOnInsert": {"user_id": player_id}
+            },
+            upsert=True
+        )
+        streak_doc = await db.player_streaks.find_one({"user_id": player_id})
+        if streak_doc and streak_doc.get("current_streak", 0) > streak_doc.get("best_streak", 0):
+            await db.player_streaks.update_one(
+                {"user_id": player_id},
+                {"$set": {"best_streak": streak_doc["current_streak"]}}
+            )
+        if match.get("club_id"):
+            await db.club_leaderboard.update_one(
+                {"club_id": match["club_id"], "user_id": player_id},
+                {
+                    "$inc": {"points": points_per_win, "wins": 1},
+                    "$set": {"updated_at": datetime.now(timezone.utc)},
+                    "$setOnInsert": {"club_id": match["club_id"], "user_id": player_id}
+                },
+                upsert=True
+            )
+
+    for player_id in losers:
+        await db.player_streaks.update_one(
+            {"user_id": player_id},
+            {"$set": {"current_streak": 0, "updated_at": datetime.now(timezone.utc)}, "$setOnInsert": {"user_id": player_id, "best_streak": 0}},
+            upsert=True
+        )
+        if match.get("club_id"):
+            await db.club_leaderboard.update_one(
+                {"club_id": match["club_id"], "user_id": player_id},
+                {"$inc": {"losses": 1}, "$set": {"updated_at": datetime.now(timezone.utc)},
+                 "$setOnInsert": {"club_id": match["club_id"], "user_id": player_id, "points": 0}},
+                upsert=True
+            )
+
+    if is_tournament_match:
+        await advance_tournament_bracket(match["tournament_id"], match_id)
+
     # Mark ratings as updated to prevent double updates
     await db.match_results.update_one(
         {"match_id": match_id},
@@ -2565,6 +2617,340 @@ async def get_club_pending_results(user: dict = Depends(get_current_user)):
     
     return result_list
 
+# ======================= TOURNAMENTS (gamification) =======================
+# Ogni partita di torneo e' un documento normale nella collezione "matches" (con
+# tournament_id/tournament_round in piu'), cosi' eredita gratis tutta la logica gia'
+# esistente di sottomissione/conferma risultato, notifiche e aggiornamento ELO -
+# vedi l'hook aggiunto in update_player_ratings_after_match per streak/classifica.
+
+class TournamentCreate(BaseModel):
+    sport: str
+    format: str = "eliminazione"  # "eliminazione" (unico formato v1, girone/americano in futuro)
+    date: str  # ISO date
+    start_time: str
+    max_players: int  # deve essere una potenza di 2 (4, 8, 16...) per il tabellone a eliminazione diretta
+    registration_mode: str  # "individual" (padel/tennis) | "team" (calcetto/calcio8)
+    team_size: int  # 1 (tennis singolo), 2 (padel/tennis doppio), 5 (calcetto), 8 (calcio8)
+    court_ids: List[str] = []  # campi assegnati al torneo, usati per generare le partite
+
+class TournamentTeamCreate(BaseModel):
+    team_name: str
+
+def _validate_bracket_size(max_players: int, team_size: int):
+    num_teams = max_players // team_size
+    if num_teams < 2 or (num_teams & (num_teams - 1)) != 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Il numero di squadre (max_players / team_size) deve essere una potenza di 2 (2, 4, 8, 16...) per il tabellone a eliminazione diretta"
+        )
+
+@api_router.post("/tournaments")
+async def create_tournament(data: TournamentCreate, user: dict = Depends(get_current_user)):
+    club = await db.clubs.find_one({"admin_user_id": user["user_id"]})
+    if not club:
+        raise HTTPException(status_code=403, detail="Not a club admin")
+    if data.sport not in SPORTS:
+        raise HTTPException(status_code=400, detail="Sport non valido")
+    if data.registration_mode not in ("individual", "team"):
+        raise HTTPException(status_code=400, detail="registration_mode deve essere 'individual' o 'team'")
+    _validate_bracket_size(data.max_players, data.team_size)
+
+    tournament = {
+        "tournament_id": f"trn_{uuid.uuid4().hex[:12]}",
+        "club_id": club["club_id"],
+        "sport": data.sport,
+        "format": data.format,
+        "date": data.date,
+        "start_time": data.start_time,
+        "max_players": data.max_players,
+        "current_players": 0,
+        "registration_mode": data.registration_mode,
+        "team_size": data.team_size,
+        "court_ids": data.court_ids,
+        "status": "open",
+        "created_at": datetime.now(timezone.utc)
+    }
+    await db.tournaments.insert_one(tournament)
+    return {k: v for k, v in tournament.items() if k != "_id"}
+
+@api_router.get("/tournaments")
+async def list_tournaments(
+    club_id: Optional[str] = None,
+    sport: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = Query(20, ge=1, le=100)
+):
+    query = {}
+    if club_id: query["club_id"] = club_id
+    if sport: query["sport"] = sport
+    if status: query["status"] = status
+    tournaments = await db.tournaments.find(query, {"_id": 0}).sort("date", 1).to_list(limit)
+    return tournaments
+
+@api_router.get("/tournaments/{tournament_id}")
+async def get_tournament(tournament_id: str):
+    tournament = await db.tournaments.find_one({"tournament_id": tournament_id}, {"_id": 0})
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+
+    if tournament["registration_mode"] == "individual":
+        participants = await db.tournament_participants.find({"tournament_id": tournament_id}, {"_id": 0}).to_list(200)
+        tournament["participants"] = participants
+    else:
+        teams = await db.tournament_teams.find({"tournament_id": tournament_id}, {"_id": 0}).to_list(50)
+        tournament["teams"] = teams
+
+    matches = await db.matches.find({"tournament_id": tournament_id}, {"_id": 0}).sort("tournament_round_order", 1).to_list(200)
+    tournament["matches"] = matches
+    return tournament
+
+@api_router.post("/tournaments/{tournament_id}/join")
+async def join_tournament_individual(tournament_id: str, user: dict = Depends(get_current_user)):
+    """Iscrizione individuale - per padel/tennis (registration_mode='individual')."""
+    tournament = await db.tournaments.find_one({"tournament_id": tournament_id})
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    if tournament["registration_mode"] != "individual":
+        raise HTTPException(status_code=400, detail="Questo torneo richiede l'iscrizione a squadra, usa /teams")
+    if tournament["status"] != "open":
+        raise HTTPException(status_code=400, detail="Le iscrizioni sono chiuse")
+    if tournament["current_players"] >= tournament["max_players"]:
+        raise HTTPException(status_code=400, detail="Torneo al completo")
+
+    existing = await db.tournament_participants.find_one({"tournament_id": tournament_id, "user_id": user["user_id"]})
+    if existing:
+        raise HTTPException(status_code=400, detail="Sei gia' iscritto")
+
+    await db.tournament_participants.insert_one({
+        "tournament_id": tournament_id,
+        "user_id": user["user_id"],
+        "joined_at": datetime.now(timezone.utc)
+    })
+    new_count = tournament["current_players"] + 1
+    update = {"current_players": new_count}
+    if new_count >= tournament["max_players"]:
+        update["status"] = "full"
+    await db.tournaments.update_one({"tournament_id": tournament_id}, {"$set": update})
+    return {"message": "Iscrizione avvenuta", "current_players": new_count}
+
+@api_router.post("/tournaments/{tournament_id}/teams")
+async def create_tournament_team(tournament_id: str, data: TournamentTeamCreate, user: dict = Depends(get_current_user)):
+    """Crea una squadra e ti unisci come capitano - per calcetto/calcio8 (registration_mode='team')."""
+    tournament = await db.tournaments.find_one({"tournament_id": tournament_id})
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    if tournament["registration_mode"] != "team":
+        raise HTTPException(status_code=400, detail="Questo torneo ha iscrizione individuale, usa /join")
+    if tournament["status"] != "open":
+        raise HTTPException(status_code=400, detail="Le iscrizioni sono chiuse")
+
+    num_teams = tournament["max_players"] // tournament["team_size"]
+    existing_teams = await db.tournament_teams.count_documents({"tournament_id": tournament_id})
+    if existing_teams >= num_teams:
+        raise HTTPException(status_code=400, detail="Numero massimo di squadre raggiunto")
+
+    team = {
+        "team_id": f"team_{uuid.uuid4().hex[:10]}",
+        "tournament_id": tournament_id,
+        "team_name": data.team_name,
+        "captain_user_id": user["user_id"],
+        "member_user_ids": [user["user_id"]],
+        "created_at": datetime.now(timezone.utc)
+    }
+    await db.tournament_teams.insert_one(team)
+    await db.tournaments.update_one({"tournament_id": tournament_id}, {"$inc": {"current_players": 1}})
+    return {k: v for k, v in team.items() if k != "_id"}
+
+@api_router.post("/tournaments/{tournament_id}/teams/{team_id}/join")
+async def join_tournament_team(tournament_id: str, team_id: str, user: dict = Depends(get_current_user)):
+    tournament = await db.tournaments.find_one({"tournament_id": tournament_id})
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    team = await db.tournament_teams.find_one({"team_id": team_id, "tournament_id": tournament_id})
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    if user["user_id"] in team["member_user_ids"]:
+        raise HTTPException(status_code=400, detail="Sei gia' in questa squadra")
+    if len(team["member_user_ids"]) >= tournament["team_size"]:
+        raise HTTPException(status_code=400, detail="Squadra al completo")
+
+    await db.tournament_teams.update_one({"team_id": team_id}, {"$push": {"member_user_ids": user["user_id"]}})
+    await db.tournaments.update_one({"tournament_id": tournament_id}, {"$inc": {"current_players": 1}})
+
+    updated_tournament = await db.tournaments.find_one({"tournament_id": tournament_id})
+    if updated_tournament["current_players"] >= updated_tournament["max_players"]:
+        await db.tournaments.update_one({"tournament_id": tournament_id}, {"$set": {"status": "full"}})
+    return {"message": "Ti sei unito alla squadra"}
+
+ROUND_NAMES = {1: "finale", 2: "semifinale", 4: "quarti", 8: "ottavi", 16: "sedicesimi"}
+
+@api_router.post("/tournaments/{tournament_id}/generate-bracket")
+async def generate_bracket(tournament_id: str, user: dict = Depends(get_current_user)):
+    """Il club admin chiude le iscrizioni e genera il tabellone (assegnazione random)."""
+    tournament = await db.tournaments.find_one({"tournament_id": tournament_id})
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    club = await db.clubs.find_one({"club_id": tournament["club_id"]})
+    if not club or club["admin_user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Solo l'admin del circolo puo' generare il tabellone")
+    if tournament["status"] not in ("open", "full"):
+        raise HTTPException(status_code=400, detail="Il tabellone e' gia' stato generato")
+
+    import random
+    if tournament["registration_mode"] == "individual":
+        participants = await db.tournament_participants.find({"tournament_id": tournament_id}).to_list(200)
+        player_ids = [p["user_id"] for p in participants]
+        random.shuffle(player_ids)
+        team_size = tournament["team_size"]
+        entrants = [player_ids[i:i+team_size] for i in range(0, len(player_ids), team_size)]
+    else:
+        teams = await db.tournament_teams.find({"tournament_id": tournament_id}).to_list(50)
+        entrants = [t["member_user_ids"] for t in teams]
+
+    num_entrants = len(entrants)
+    if num_entrants < 2 or (num_entrants & (num_entrants - 1)) != 0:
+        raise HTTPException(status_code=400, detail=f"Servono un numero di squadre/coppie potenza di 2 (trovate {num_entrants})")
+
+    random.shuffle(entrants)
+    round_name = ROUND_NAMES.get(num_entrants // 2, f"round da {num_entrants}")
+    courts = tournament.get("court_ids") or [None]
+
+    created_matches = []
+    for i in range(0, num_entrants, 2):
+        team_a, team_b = entrants[i], entrants[i+1]
+        match_id = f"match_{uuid.uuid4().hex[:12]}"
+        match = {
+            "match_id": match_id,
+            "club_id": tournament["club_id"],
+            "sport": tournament["sport"],
+            "format": tournament["sport"],
+            "court_id": courts[(i // 2) % len(courts)],
+            "date": tournament["date"],
+            "start_time": tournament["start_time"],
+            "end_time": tournament["start_time"],
+            "duration_minutes": 60,
+            "max_players": len(team_a) + len(team_b),
+            "current_players": len(team_a) + len(team_b),
+            "skill_level": "all",
+            "price_per_player": 0.0,
+            "status": "full",
+            "tournament_id": tournament_id,
+            "tournament_round": round_name,
+            "tournament_round_order": num_entrants,  # piu' alto = round piu' precoce, usato per ordinare
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc)
+        }
+        await db.matches.insert_one(match)
+        for uid in team_a + team_b:
+            await db.match_participants.insert_one({
+                "match_id": match_id, "user_id": uid,
+                "team": "A" if uid in team_a else "B",
+                "joined_at": datetime.now(timezone.utc)
+            })
+        created_matches.append(match_id)
+
+    await db.tournaments.update_one({"tournament_id": tournament_id}, {"$set": {"status": "in_progress"}})
+    return {"message": "Tabellone generato", "round": round_name, "matches_created": len(created_matches)}
+
+async def advance_tournament_bracket(tournament_id: str, completed_match_id: str):
+    """Chiamata dopo la conferma di un risultato di una partita di torneo: se tutto il round
+    e' completo, genera il round successivo pescando i vincitori; se era la finale, chiude
+    il torneo e assegna il bonus punti/badge."""
+    completed_match = await db.matches.find_one({"match_id": completed_match_id})
+    if not completed_match:
+        return
+    round_order = completed_match.get("tournament_round_order")
+
+    round_matches = await db.matches.find({
+        "tournament_id": tournament_id, "tournament_round_order": round_order
+    }).to_list(50)
+    if any(m["status"] != "completed" for m in round_matches):
+        return  # round non ancora finito, aspettiamo le altre partite
+
+    winners = []
+    for m in round_matches:
+        result = await db.match_results.find_one({"match_id": m["match_id"]})
+        if not result:
+            continue
+        participants = await db.match_participants.find({"match_id": m["match_id"]}).to_list(20)
+        team = result.get("winner_team")
+        winners.append([p["user_id"] for p in participants if p.get("team") == team])
+
+    tournament = await db.tournaments.find_one({"tournament_id": tournament_id})
+
+    if len(winners) == 1:
+        # Era la finale: torneo completato, bonus al team vincitore
+        champions = winners[0]
+        for uid in champions:
+            await db.club_leaderboard.update_one(
+                {"club_id": tournament["club_id"], "user_id": uid},
+                {"$inc": {"points": 100}, "$set": {"updated_at": datetime.now(timezone.utc)}},
+                upsert=True
+            )
+            await db.player_badges.insert_one({
+                "badge_id": f"badge_{uuid.uuid4().hex[:10]}",
+                "user_id": uid, "club_id": tournament["club_id"],
+                "badge_type": "torneo_vinto", "tournament_id": tournament_id,
+                "earned_at": datetime.now(timezone.utc)
+            })
+            await create_notification(
+                user_id=uid, title="🏆 Hai vinto il torneo!",
+                message="Complimenti, sei il campione! +100 punti classifica.",
+                notification_type="tournament_won"
+            )
+        await db.tournaments.update_one({"tournament_id": tournament_id}, {"$set": {"status": "completed"}})
+        return
+
+    # Round successivo: badge di partecipazione al round raggiunto + pairing random dei vincitori
+    import random
+    random.shuffle(winners)
+    next_round_order = round_order // 2
+    round_name = ROUND_NAMES.get(next_round_order, f"round da {next_round_order*2}")
+    courts = tournament.get("court_ids") or [None]
+
+    for i in range(0, len(winners), 2):
+        team_a, team_b = winners[i], winners[i+1]
+        match_id = f"match_{uuid.uuid4().hex[:12]}"
+        match = {
+            "match_id": match_id, "club_id": tournament["club_id"], "sport": tournament["sport"],
+            "format": tournament["sport"], "court_id": courts[(i // 2) % len(courts)],
+            "date": tournament["date"], "start_time": tournament["start_time"], "end_time": tournament["start_time"],
+            "duration_minutes": 60, "max_players": len(team_a) + len(team_b), "current_players": len(team_a) + len(team_b),
+            "skill_level": "all", "price_per_player": 0.0, "status": "full",
+            "tournament_id": tournament_id, "tournament_round": round_name, "tournament_round_order": next_round_order,
+            "created_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)
+        }
+        await db.matches.insert_one(match)
+        for uid in team_a + team_b:
+            await db.match_participants.insert_one({
+                "match_id": match_id, "user_id": uid, "team": "A" if uid in team_a else "B",
+                "joined_at": datetime.now(timezone.utc)
+            })
+            await create_notification(
+                user_id=uid, title=f"⚔️ Sei in {round_name}!",
+                message="Hai vinto il turno precedente, la prossima sfida ti aspetta.",
+                notification_type="tournament_advance"
+            )
+
+@api_router.get("/clubs/{club_id}/leaderboard")
+async def get_club_leaderboard(club_id: str, period: str = Query("all_time", regex="^(week|month|all_time)$"), limit: int = Query(20, ge=1, le=100)):
+    """Classifica del circolo. Nota v1: 'week'/'month' filtrano sui punti totali correnti
+    (non c'e' ancora uno storico segmentato per periodo - prossimo passo se serve davvero)."""
+    entries = await db.club_leaderboard.find({"club_id": club_id}, {"_id": 0}).sort("points", -1).to_list(limit)
+    for e in entries:
+        user = await db.users.find_one({"user_id": e["user_id"]}, {"_id": 0, "name": 1})
+        e["name"] = user["name"] if user else "Giocatore"
+        streak = await db.player_streaks.find_one({"user_id": e["user_id"]}, {"_id": 0})
+        e["current_streak"] = streak["current_streak"] if streak else 0
+    return entries
+
+@api_router.get("/player/streak")
+async def get_my_streak(user: dict = Depends(get_current_user)):
+    streak = await db.player_streaks.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not streak:
+        return {"current_streak": 0, "best_streak": 0}
+    return streak
+
 # ======================= CHAT ENDPOINTS =======================
 
 @api_router.get("/matches/{match_id}/chat")
@@ -3654,6 +4040,18 @@ async def create_database_indexes():
         # Local sponsors indexes
         await db.local_sponsors.create_index("sponsor_id", unique=True)
         await db.local_sponsors.create_index([("city", 1), ("is_active", 1)])
+        
+        # Tournaments (gamification) indexes
+        await db.tournaments.create_index("tournament_id", unique=True)
+        await db.tournaments.create_index([("club_id", 1), ("status", 1)])
+        await db.tournament_participants.create_index([("tournament_id", 1), ("user_id", 1)], unique=True)
+        await db.tournament_teams.create_index("team_id", unique=True)
+        await db.tournament_teams.create_index("tournament_id")
+        await db.matches.create_index([("tournament_id", 1), ("tournament_round_order", 1)])
+        await db.club_leaderboard.create_index([("club_id", 1), ("user_id", 1)], unique=True)
+        await db.club_leaderboard.create_index([("club_id", 1), ("points", -1)])
+        await db.player_streaks.create_index("user_id", unique=True)
+        await db.player_badges.create_index("user_id")
         
         # Courts collection
         await db.courts.create_index("court_id", unique=True)
