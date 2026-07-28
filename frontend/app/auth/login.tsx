@@ -1,4 +1,4 @@
-// Login Screen - Stable Version
+// Login Screen
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   Image,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,8 +17,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button, Input, GradientBackground } from '../../src/components';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useLanguage } from '../../src/contexts/LanguageContext';
-import { COLORS } from '../../src/utils/constants';
+import { COLORS, FONTS } from '../../src/utils/constants';
 import { apiClient } from '../../src/api/client';
+
+const appLogo = require('../../assets/images/gamification/app-logo.png');
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -30,10 +33,7 @@ export default function LoginScreen() {
 
   // Navigate after successful login
   useEffect(() => {
-    console.log('[Login useEffect] isAuthenticated:', isAuthenticated, 'user:', user?.email);
     if (isAuthenticated && user) {
-      console.log('[Login] User authenticated, navigating to:', user.role);
-      // Use setTimeout to ensure state is fully updated
       setTimeout(() => {
         if (user.role === 'super_admin') {
           router.push('/admin/dashboard');
@@ -54,16 +54,11 @@ export default function LoginScreen() {
 
     try {
       setError('');
-      console.log('[Login] Attempting login for:', email);
       await login(email, password);
-      console.log('[Login] Login successful');
-      
-      // Small delay then navigate
+
       setTimeout(async () => {
         try {
           const userData = await apiClient.getMe();
-          console.log('[Login] User data:', userData?.role);
-          
           if (userData) {
             if (userData.role === 'super_admin') {
               router.replace('/admin/dashboard');
@@ -74,18 +69,26 @@ export default function LoginScreen() {
             }
           }
         } catch (navErr) {
-          console.error('[Login] Navigation error:', navErr);
-          // Fallback navigation
           router.replace('/player/home');
         }
       }, 200);
     } catch (err: any) {
-      console.error('[Login] Login failed:', err?.message || err);
-      const errorMessage = err.response?.data?.detail || 
-                          err.message || 
+      const errorMessage = err.response?.data?.detail ||
+                          err.message ||
                           'Errore di connessione. Riprova.';
       setError(errorMessage);
     }
+  };
+
+  const handleGoogleLogin = () => {
+    // TODO: il flusso Google dell'app originale dipendeva interamente dal proxy
+    // OAuth di Emergent (demobackend.emergentagent.com) e non aveva comunque un
+    // vero punto di avvio collegato (solo il callback che lo riceve, e solo su
+    // web). Va ricostruito con credenziali OAuth Google reali prima di attivarlo.
+    Alert.alert(
+      'Non ancora disponibile',
+      'L\'accesso con Google è in arrivo - per ora usa email e password.'
+    );
   };
 
   return (
@@ -108,14 +111,9 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             <View style={styles.header}>
-              <Image
-                source={{ uri: 'https://customer-assets.emergentagent.com/job_padel-finder-app/artifacts/np98g9bo_logo%20pagna%20benvenuto.png' }}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
-              <Text style={styles.logoText}>Match Sport 24</Text>
-              <Text style={styles.title}>{t('login')}</Text>
-              <Text style={styles.subtitle}>Accedi al tuo account Match Sport 24</Text>
+              <Image source={appLogo} style={styles.logo} resizeMode="contain" />
+              <Text style={styles.title}>Ciao</Text>
+              <Text style={styles.subtitle}>Il tuo prossimo match parte da qui.</Text>
             </View>
 
             {error ? (
@@ -129,47 +127,68 @@ export default function LoginScreen() {
               <Input
                 label={t('email')}
                 placeholder="nome@email.com"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              leftIcon="mail-outline"
-            />
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                leftIcon="mail-outline"
+              />
 
-            <Input
-              label={t('password')}
-              placeholder="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              leftIcon="lock-closed-outline"
-            />
+              <Input
+                label={t('password')}
+                placeholder="Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                leftIcon="lock-closed-outline"
+              />
 
-            <TouchableOpacity 
-              onPress={() => router.push('/auth/forgot-password')}
-              style={styles.forgotPassword}
-            >
-              <Text style={styles.forgotPasswordText}>Password dimenticata?</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push('/auth/forgot-password')}
+                style={styles.forgotPassword}
+              >
+                <Text style={styles.forgotPasswordText}>Password dimenticata?</Text>
+              </TouchableOpacity>
 
-            <Button
-              title={t('login')}
-              onPress={handleLogin}
-              loading={isLoading}
-              fullWidth
-              size="large"
-            />
-          </View>
+              <Button
+                title="Accedi"
+                onPress={handleLogin}
+                loading={isLoading}
+                fullWidth
+                size="large"
+              />
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>{t('no_account')}</Text>
-            <TouchableOpacity onPress={() => router.push('/auth/register')}>
-              <Text style={styles.footerLink}> {t('register')}</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>oppure</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin} activeOpacity={0.8}>
+                <View style={styles.googleIcon}>
+                  <Text style={styles.googleIconText}>G</Text>
+                </View>
+                <Text style={styles.googleButtonText}>Accedi con Google</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.guestButton}
+                onPress={() => router.push('/guest/explore')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.guestButtonText}>Esplora partite senza account</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>{t('no_account')}</Text>
+              <TouchableOpacity onPress={() => router.push('/auth/register')}>
+                <Text style={styles.footerLink}> {t('register')}</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </GradientBackground>
   );
 }
@@ -189,7 +208,7 @@ const styles = StyleSheet.create({
   forgotPasswordText: {
     color: COLORS.primary,
     fontSize: 14,
-    fontWeight: '500',
+    fontFamily: FONTS.label,
   },
   scrollContent: {
     flexGrow: 1,
@@ -207,28 +226,22 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: 20,
   },
-  logoImage: {
-    width: 90,
-    height: 90,
-    marginBottom: 8,
-  },
-  logoText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: COLORS.primary,
-    marginTop: 8,
+  logo: {
+    width: 80,
+    height: 80,
+    marginBottom: 10,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '800',
+    fontSize: 26,
+    fontFamily: FONTS.title,
     color: COLORS.text,
-    marginTop: 16,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: FONTS.body,
     color: COLORS.textSecondary,
     textAlign: 'center',
   },
@@ -242,11 +255,71 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: COLORS.error,
+    fontFamily: FONTS.body,
     marginLeft: 8,
     flex: 1,
   },
   form: {
     flex: 1,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  dividerText: {
+    color: COLORS.textMuted,
+    fontFamily: FONTS.body,
+    marginHorizontal: 14,
+    fontSize: 13,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1.5,
+    borderColor: COLORS.surfaceLight,
+    borderRadius: 14,
+    paddingVertical: 14,
+  },
+  googleIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleIconText: {
+    fontSize: 13,
+    fontFamily: FONTS.title,
+    color: '#4285F4',
+  },
+  googleButtonText: {
+    fontSize: 15,
+    fontFamily: FONTS.button,
+    color: COLORS.text,
+  },
+  guestButton: {
+    marginTop: 14,
+    paddingVertical: 13,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: COLORS.surfaceLight,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+  },
+  guestButtonText: {
+    fontSize: 13.5,
+    fontFamily: FONTS.label,
+    color: COLORS.textSecondary,
   },
   footer: {
     flexDirection: 'row',
@@ -255,11 +328,12 @@ const styles = StyleSheet.create({
   },
   footerText: {
     color: COLORS.textSecondary,
-    fontSize: 16,
+    fontFamily: FONTS.body,
+    fontSize: 15,
   },
   footerLink: {
     color: COLORS.primary,
-    fontSize: 16,
-    fontWeight: '600',
+    fontFamily: FONTS.button,
+    fontSize: 15,
   },
 });
