@@ -1,49 +1,25 @@
-# Match24 Sport
+# Match Sport 24
 
-Piattaforma per trovare partite di padel e calcetto.
+App di matchmaking sportivo (padel, tennis, calcetto, calcio a 8): prenotazione campi, ricerca partite, gestione circoli.
 
-## Stack Tecnologico
+## Struttura
 
-- **Framework**: Next.js 14 (App Router)
-- **Linguaggio**: TypeScript
-- **Stile**: Tailwind CSS
-- **UI**: React Components (Custom)
+- `frontend/` — app mobile (Expo / React Native, iOS + Android)
+- `backend/` — API (FastAPI + MongoDB), vedi `backend/.env.example` per le variabili richieste e `backend/Dockerfile` per il deploy
 
-## Struttura del Progetto
+## Sviluppo locale
 
-- `src/app`: Pagine e API routes
-- `src/components`: Componenti UI riutilizzabili
-- `src/lib`: Utility functions
-- `src/types`: Definizioni TypeScript
-- `src/data`: Dati mock
+**Backend**
+```bash
+cd backend
+pip install -r requirements.txt
+cp .env.example .env   # e compila con i valori reali
+uvicorn server:app --reload
+```
 
-## Come iniziare
-
-Poiché il progetto è stato creato manualmente, assicurati di avere Node.js installato.
-
-1.  **Installare le dipendenze**:
-    ```bash
-    npm install
-    ```
-
-2.  **Avviare il server di sviluppo**:
-    ```bash
-    npm run dev
-    ```
-
-3.  Apri [http://localhost:3000](http://localhost:3000) nel tuo browser.
-
-## Pagine Principali
-
-- `/`: Landing page pubblica
-- `/login`: Pagina di accesso
-- `/dashboard/player`: Dashboard giocatore
-- `/dashboard/club`: Dashboard circolo
-
-## API
-
-Il progetto usa dati mock serviti tramite API routes interne:
-- `/api/player/overview`
-- `/api/player/matches`
-- `/api/club/overview`
-- `/api/club/matches`
+**Frontend**
+```bash
+cd frontend
+npm install
+npx expo start
+```

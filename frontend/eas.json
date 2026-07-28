@@ -1,0 +1,52 @@
+{
+  "cli": {
+    "version": ">= 3.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": false,
+        "buildConfiguration": "Release"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "ios": {
+        "resourceClass": "m-medium",
+        "buildConfiguration": "Release"
+      },
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://padel-finder-app.emergent.host"
+      },
+      "cache": {
+        "key": "v10-notturna-redesign-freemium",
+        "paths": []
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "andreaiannella@icloud.com",
+        "ascAppId": "6760661319",
+        "appleTeamId": "584VX3RB4D"
+      }
+    }
+  }
+}

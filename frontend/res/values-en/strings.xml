@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Match Sport 24</string>
+    <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
+    <string name="error">Error</string>
+    <string name="loading">Loading...</string>
+    <string name="retry">Retry</string>
+    <string name="submit">Submit</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="close">Close</string>
+    <string name="back">Back</string>
+    <string name="next">Next</string>
+    <string name="done">Done</string>
+    <string name="search">Search</string>
+    <string name="settings">Settings</string>
+    <string name="profile">Profile</string>
+    <string name="home">Home</string>
+    <string name="login">Login</string>
+    <string name="logout">Logout</string>
+    <string name="register">Register</string>
+    <string name="padel">Padel</string>
+    <string name="tennis">Tennis</string>
+    <string name="calcetto">5-a-side Football</string>
+    <string name="calcio8">8-a-side Football</string>
+    <string name="match">Match</string>
+    <string name="matches">Matches</string>
+    <string name="create_match">Create Match</string>
+    <string name="join_match">Join Match</string>
+    <string name="leave_match">Leave Match</string>
+    <string name="club">Club</string>
+    <string name="clubs">Clubs</string>
+    <string name="my_club">My Club</string>
+    <string name="reviews">Reviews</string>
+    <string name="write_review">Write a Review</string>
+    <string name="rating">Rating</string>
+    <string name="subscription_monthly_title">Monthly Subscription</string>
+    <string name="subscription_monthly_description">Full access to Match Sport 24 platform</string>
+    <string name="subscription_price">€49.99/month</string>
+</resources>

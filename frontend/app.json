@@ -1,0 +1,110 @@
+{
+  "expo": {
+    "name": "Match Sport 24",
+    "slug": "match-sport-24",
+    "version": "1.2.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/app-icon.png",
+    "scheme": "matchsport24",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.matchsport24.app",
+      "buildNumber": "26",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Match Sport 24 utilizza la fotocamera per scattare foto del tuo profilo e dei campi sportivi del tuo circolo, permettendoti di personalizzare il tuo account e mostrare le strutture ai giocatori.",
+        "NSPhotoLibraryUsageDescription": "Match Sport 24 accede alla tua libreria foto per permetterti di caricare immagini del profilo, foto dei campi sportivi o del circolo, ad esempio per personalizzare l'account o condividere contenuti visivi con altri giocatori nella piattaforma.",
+        "CFBundleAllowMixedLocalizations": true,
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/app-icon.png",
+        "backgroundColor": "#0D1410"
+      },
+      "package": "com.matchsport24.app",
+      "versionCode": 14,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/app-icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/background-gradient.png",
+          "imageWidth": 1200,
+          "resizeMode": "cover",
+          "backgroundColor": "#0D1410"
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Match Sport 24 accede alle tue foto per caricare immagini del profilo o dei campi sportivi del circolo.",
+          "cameraPermission": "Match Sport 24 utilizza la fotocamera per scattare foto del profilo o dei campi sportivi."
+        }
+      ],
+      "./plugins/withIAPDimensionStrategy.js",
+      "./plugins/withAndroidStrings.js",
+      [
+        "expo-iap",
+        {
+          "android": {
+            "storeType": "play"
+          }
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          },
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "minSdkVersion": 24,
+            "buildToolsVersion": "35.0.0",
+            "extraMavenRepos": ["https://jitpack.io"]
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "locales": {
+      "it": "./locales/it.json",
+      "en": "./locales/en.json",
+      "es": "./locales/es.json",
+      "fr": "./locales/fr.json"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "764426cd-23ab-4cb4-9f6b-c8dbf743dc9e"
+      },
+      "backendUrl": "https://padel-finder-app.preview.emergentagent.com",
+      "router": {}
+    },
+    "owner": "match24",
+    "primaryColor": "#FFB020",
+    "backgroundColor": "#0D1410"
+  }
+}
