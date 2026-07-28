@@ -15,10 +15,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card, LoadingSpinner, Button, SportImage } from '../../src/components';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useLanguage } from '../../src/contexts/LanguageContext';
-import { COLORS, SPORTS } from '../../src/utils/constants';
+import { COLORS, FONTS, SPORTS } from '../../src/utils/constants';
 import { apiClient } from '../../src/api/client';
-import { PlayerProfile, PlayerRating } from '../../src/types';
+import { PlayerProfile, PlayerRating, PlayerStreak, PlayerBadge } from '../../src/types';
 import { GradientBackground } from '../../src/components';
+
+const iconFlame = require('../../assets/images/gamification/icon-flame.png');
+const iconPodium = require('../../assets/images/gamification/icon-podium.png');
+
+const BADGE_LABELS: Record<string, string> = {
+  torneo_vinto: 'Torneo Vinto',
+};
 
 export default function PlayerProfileScreen() {
   const router = useRouter();
@@ -28,19 +35,25 @@ export default function PlayerProfileScreen() {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [ratings, setRatings] = useState<PlayerRating[]>([]);
   const [stats, setStats] = useState<any>(null);
+  const [streak, setStreak] = useState<PlayerStreak | null>(null);
+  const [badges, setBadges] = useState<PlayerBadge[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async () => {
     try {
-      const [profileData, ratingsData, statsData] = await Promise.all([
+      const [profileData, ratingsData, statsData, streakData, badgesData] = await Promise.all([
         apiClient.getPlayerProfile(),
         apiClient.getPlayerRatings(),
         apiClient.getPlayerStats(),
+        apiClient.getMyStreak(),
+        apiClient.getMyBadges(),
       ]);
       setProfile(profileData);
       setRatings(ratingsData);
       setStats(statsData);
+      setStreak(streakData);
+      setBadges(badgesData);
     } catch (error) {
       console.error('Error fetching profile:', error);
     } finally {
@@ -115,6 +128,15 @@ export default function PlayerProfileScreen() {
               <Text style={styles.locationText}>{profile.city}</Text>
             </View>
           )}
+          {streak && streak.current_streak > 0 && (
+            <View style={styles.streakPill}>
+              <Image source={iconFlame} style={styles.streakIcon} />
+              <Text style={styles.streakText}>{streak.current_streak} di fila</Text>
+              {streak.best_streak > streak.current_streak && (
+                <Text style={styles.streakBest}>· record {streak.best_streak}</Text>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Stats Summary */}
@@ -140,6 +162,28 @@ export default function PlayerProfileScreen() {
             </View>
           </View>
         </Card>
+
+        {/* Badge vinti - solo se ce n'e' almeno uno, niente sezione vuota */}
+        {badges.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <Image source={iconPodium} style={styles.sectionIcon} />
+              <Text style={styles.sectionTitle}>I tuoi trofei</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.badgesRow}>
+                {badges.map((badge) => (
+                  <View key={badge.badge_id} style={styles.badgeChip}>
+                    <Ionicons name="trophy" size={22} color={COLORS.primary} />
+                    <Text style={styles.badgeLabel}>
+                      {BADGE_LABELS[badge.badge_type] || badge.badge_type}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        )}
 
         {/* Ratings by Sport */}
         <View style={styles.section}>
@@ -287,12 +331,13 @@ const styles = StyleSheet.create({
   },
   userName: {
     fontSize: 24,
-    fontWeight: '800',
+    fontFamily: FONTS.title,
     color: COLORS.text,
     marginBottom: 4,
   },
   userEmail: {
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: FONTS.body,
     color: COLORS.textSecondary,
     marginBottom: 8,
   },
@@ -302,8 +347,35 @@ const styles = StyleSheet.create({
   },
   locationText: {
     fontSize: 14,
+    fontFamily: FONTS.body,
     color: COLORS.textSecondary,
     marginLeft: 4,
+  },
+  streakPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.accent + '18',
+    borderWidth: 1.5,
+    borderColor: COLORS.accent,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginTop: 12,
+  },
+  streakIcon: {
+    width: 16,
+    height: 16,
+  },
+  streakText: {
+    fontSize: 13.5,
+    fontFamily: FONTS.button,
+    color: COLORS.accent,
+  },
+  streakBest: {
+    fontSize: 12,
+    fontFamily: FONTS.body,
+    color: COLORS.textMuted,
   },
   statsCard: {
     marginBottom: 24,
@@ -323,22 +395,54 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 28,
-    fontWeight: '800',
+    fontFamily: FONTS.title,
     color: COLORS.text,
   },
   statLabel: {
     fontSize: 12,
+    fontFamily: FONTS.body,
     color: COLORS.textMuted,
     marginTop: 4,
   },
   section: {
     marginBottom: 24,
   },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  sectionIcon: {
+    width: 20,
+    height: 20,
+  },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontFamily: FONTS.title,
     color: COLORS.text,
     marginBottom: 12,
+  },
+  badgesRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  badgeChip: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '50',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 6,
+    minWidth: 100,
+  },
+  badgeLabel: {
+    fontSize: 11.5,
+    fontFamily: FONTS.label,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
   ratingCard: {
     marginBottom: 12,
@@ -360,12 +464,12 @@ const styles = StyleSheet.create({
   },
   sportName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: FONTS.subtitle,
     color: COLORS.text,
   },
   levelBadge: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: FONTS.label,
     marginTop: 2,
   },
   ratingValueContainer: {
@@ -373,7 +477,7 @@ const styles = StyleSheet.create({
   },
   ratingValue: {
     fontSize: 32,
-    fontWeight: '800',
+    fontFamily: FONTS.title,
   },
   ratingStats: {
     flexDirection: 'row',
@@ -388,11 +492,12 @@ const styles = StyleSheet.create({
   },
   ratingStatValue: {
     fontSize: 18,
-    fontWeight: '700',
+    fontFamily: FONTS.title,
     color: COLORS.text,
   },
   ratingStatLabel: {
     fontSize: 12,
+    fontFamily: FONTS.body,
     color: COLORS.textMuted,
     marginTop: 2,
   },
@@ -412,7 +517,7 @@ const styles = StyleSheet.create({
   },
   languageText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: FONTS.label,
     color: COLORS.textSecondary,
   },
   languageTextActive: {
@@ -429,6 +534,7 @@ const styles = StyleSheet.create({
   menuItemText: {
     flex: 1,
     fontSize: 16,
+    fontFamily: FONTS.body,
     color: COLORS.text,
     marginLeft: 12,
   },

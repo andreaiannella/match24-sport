@@ -2951,6 +2951,11 @@ async def get_my_streak(user: dict = Depends(get_current_user)):
         return {"current_streak": 0, "best_streak": 0}
     return streak
 
+@api_router.get("/player/badges")
+async def get_my_badges(user: dict = Depends(get_current_user)):
+    badges = await db.player_badges.find({"user_id": user["user_id"]}, {"_id": 0}).sort("earned_at", -1).to_list(100)
+    return badges
+
 # ======================= CHAT ENDPOINTS =======================
 
 @api_router.get("/matches/{match_id}/chat")

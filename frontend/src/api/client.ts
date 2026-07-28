@@ -612,6 +612,11 @@ class APIClient {
     const response = await this.client.get('/player/streak');
     return response.data;
   }
+
+  async getMyBadges() {
+    const response = await this.client.get('/player/badges');
+    return response.data;
+  }
 }
 
 export const apiClient = new APIClient();

@@ -238,3 +238,12 @@ export interface PlayerStreak {
   current_streak: number;
   best_streak: number;
 }
+
+export interface PlayerBadge {
+  badge_id: string;
+  user_id: string;
+  club_id?: string;
+  badge_type: string;
+  tournament_id?: string;
+  earned_at: string;
+}
