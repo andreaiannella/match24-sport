@@ -2720,7 +2720,22 @@ async def get_tournament(tournament_id: str):
         teams = await db.tournament_teams.find({"tournament_id": tournament_id}, {"_id": 0}).to_list(50)
         tournament["teams"] = teams
 
-    matches = await db.matches.find({"tournament_id": tournament_id}, {"_id": 0}).sort("tournament_round_order", 1).to_list(200)
+    matches = await db.matches.find({"tournament_id": tournament_id}, {"_id": 0}).sort("tournament_round_order", -1).to_list(200)
+    # Arricchisco ogni partita con i nomi dei partecipanti per squadra e il risultato,
+    # cosi' il tabellone si costruisce con una sola chiamata invece di N.
+    for m in matches:
+        match_participants = await db.match_participants.find({"match_id": m["match_id"]}, {"_id": 0}).to_list(20)
+        team_a_ids = [p["user_id"] for p in match_participants if p.get("team") == "A"]
+        team_b_ids = [p["user_id"] for p in match_participants if p.get("team") == "B"]
+        names = {}
+        for uid in team_a_ids + team_b_ids:
+            u = await db.users.find_one({"user_id": uid}, {"_id": 0, "name": 1})
+            names[uid] = u["name"] if u else "Giocatore"
+        m["team_a_names"] = [names[uid] for uid in team_a_ids]
+        m["team_b_names"] = [names[uid] for uid in team_b_ids]
+        if m["status"] == "completed":
+            result = await db.match_results.find_one({"match_id": m["match_id"]}, {"_id": 0})
+            m["result"] = result
     tournament["matches"] = matches
     return tournament
 
@@ -2856,7 +2871,7 @@ async def generate_bracket(tournament_id: str, user: dict = Depends(get_current_
             "status": "full",
             "tournament_id": tournament_id,
             "tournament_round": round_name,
-            "tournament_round_order": num_entrants,  # piu' alto = round piu' precoce, usato per ordinare
+            "tournament_round_order": num_entrants // 2,  # = numero di partite in questo round (coerente con ROUND_NAMES); piu' alto = round piu' precoce
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc)
         }
