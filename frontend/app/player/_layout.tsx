@@ -95,6 +95,18 @@ export default function PlayerLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="leaderboard"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="tournament"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

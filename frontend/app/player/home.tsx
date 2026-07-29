@@ -188,7 +188,7 @@ export default function PlayerHomeScreen() {
           <TouchableOpacity
             style={styles.rankHero}
             activeOpacity={0.85}
-            onPress={() => router.push(`/player/club/${myClub.club_id}` as any)}
+            onPress={() => router.push(`/player/leaderboard?clubId=${myClub.club_id}` as any)}
           >
             <Image source={iconCrown} style={styles.crownFloat} />
             <Text style={styles.rankLabel}>NEL TUO CIRCOLO · {myClub.name.toUpperCase()}</Text>

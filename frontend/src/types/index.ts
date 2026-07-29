@@ -94,6 +94,12 @@ export interface Match {
   result?: MatchResult;
   club?: Club;
   club_is_premium?: boolean;
+  // Presenti solo per le partite generate da un torneo
+  tournament_id?: string;
+  tournament_round?: string;
+  tournament_round_order?: number;
+  team_a_names?: string[];
+  team_b_names?: string[];
 }
 
 export interface MatchParticipant {

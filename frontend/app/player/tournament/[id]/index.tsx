@@ -278,9 +278,16 @@ export default function TournamentDetailScreen() {
           )}
 
           {tournament.status === 'in_progress' && (
-            <TouchableOpacity style={styles.bracketLink} onPress={() => router.push('/player/my-matches')}>
+            <TouchableOpacity style={styles.bracketLink} onPress={() => router.push(`/player/tournament/${tournament.tournament_id}/bracket` as any)}>
               <Image source={iconFlame} style={styles.bracketLinkIcon} />
-              <Text style={styles.bracketLinkText}>Il tabellone è partito - guarda le tue partite</Text>
+              <Text style={styles.bracketLinkText}>Il tabellone è partito - guardalo</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+            </TouchableOpacity>
+          )}
+          {tournament.status === 'completed' && (
+            <TouchableOpacity style={styles.bracketLink} onPress={() => router.push(`/player/tournament/${tournament.tournament_id}/bracket` as any)}>
+              <Ionicons name="trophy" size={20} color={COLORS.primary} />
+              <Text style={styles.bracketLinkText}>Torneo concluso - guarda il tabellone finale</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
             </TouchableOpacity>
           )}
